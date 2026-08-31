@@ -349,7 +349,8 @@ var S = {
   to: D_MAX,
   owners: {}, subs: {}, areas: {}, codes: {},
   disDim: 'main',      // 病种分析维度：main=按渠道 / owner=按运营
-  disMetric: 'cost'    // 病种分析指标：cost/perf/cpa/deal/eff/leads/roi
+  disMetric: 'cost',   // 病种分析指标：cost/perf/cpa/deal/eff/leads/roi
+  monChannelMetric: 'perf'  // 月度体量-渠道结构图指标：perf/消耗
 };
 // 对比页独立区间
 var CMP = { base: null, prev: null };
@@ -658,6 +659,7 @@ function renderNav() {
   h += grp('ng-an', '分析',
     navItem('alert', null, '数据预警', '', '#e5484d') +
     navItem('disease', null, '病种分析', '', '#ffd700') +
+    navItem('monthly', null, '月度体量', '', '#4dd4c8') +
     navItem('compare', null, '数据对比分析', '', '#a78bfa'));
   $('#nav').innerHTML = h;
   $('#brandSub').textContent = D_MIN + ' 至 ' + D_MAX + ' | ' + fmtInt(R.length) + ' 条记录';
@@ -694,6 +696,7 @@ function renderTop() {
   var t = S.page === 'overview' ? '数据汇总' :
           S.page === 'owner' ? '运营' :
           S.page === 'disease' ? '病种分析' :
+          S.page === 'monthly' ? '月度体量分析' :
           S.page === 'alert' ? '数据预警' :
           S.page === 'compare' ? '数据对比分析' : (S.main || '渠道');
   var sub = '';
@@ -760,6 +763,12 @@ function renderTop() {
         pc += '<button data-dismetric="' + x[0] + '"' + (S.disMetric === x[0] ? ' class="on"' : '') + '>' + x[1] + '</button>';
       });
     pc += '</div>';
+  } else if (S.page === 'monthly') {
+    pc += '<div class="seg" id="monCh">';
+    [['perf', '渠道业绩'], ['cost', '渠道消耗']].forEach(function (x) {
+      pc += '<button data-monch="' + x[0] + '"' + (S.monChannelMetric === x[0] ? ' class="on"' : '') + '>' + x[1] + '</button>';
+    });
+    pc += '</div>';
   }
   $('#pageCtl').innerHTML = pc;
   var cd = $('#clrDim');
@@ -777,6 +786,10 @@ function renderTop() {
   var dm = $('#disMetric');
   if (dm) dm.querySelectorAll('[data-dismetric]').forEach(function (b) {
     b.addEventListener('click', function () { S.disMetric = b.dataset.dismetric; render(); });
+  });
+  var mc = $('#monCh');
+  if (mc) mc.querySelectorAll('[data-monch]').forEach(function (b) {
+    b.addEventListener('click', function () { S.monChannelMetric = b.dataset.monch; render(); });
   });
 }
 function quickRange(mode) {
@@ -1308,7 +1321,147 @@ function pageMain() {
   renderFoot();
 }
 
-/* ---------- 页面：数据预警 ---------- */
+/* ---------- 页面：月度体量 ---------- */
+function monthlyAgg() {
+  var m = {};
+  R.forEach(function (r) {
+    var ym = r.d.slice(0, 7);
+    if (!m[ym]) m[ym] = { ym: ym, cost: 0, leads: 0, valid: 0, arrive: 0, deal: 0, perf: 0 };
+    m[ym].cost += r.cost; m[ym].leads += r.leads; m[ym].valid += r.valid;
+    m[ym].arrive += r.arrive; m[ym].deal += r.deal; m[ym].perf += r.perf;
+  });
+  return Object.keys(m).sort().map(function (k) { return m[k]; });
+}
+function pageMonthly() {
+  var agg = monthlyAgg();
+  var n = agg.length;
+  if (!n) { $('#content').innerHTML = '<div class="empty">当前时间及范围内无数据。</div>'; renderFoot(); return; }
+  var tc = agg.reduce(function (s, x) { return s + x.cost; }, 0);
+  var tp = agg.reduce(function (s, x) { return s + x.perf; }, 0);
+  var tl = agg.reduce(function (s, x) { return s + x.leads; }, 0);
+  var ta = agg.reduce(function (s, x) { return s + x.arrive; }, 0);
+  var td = agg.reduce(function (s, x) { return s + x.deal; }, 0);
+  var cmgr = n >= 2 ? (Math.pow(agg[n - 1].perf / agg[0].perf, 1 / (n - 1)) - 1) : 0;
+  var maxPerf = agg.reduce(function (m, x) { return Math.max(m, x.perf); }, 0);
+
+  var h = '<div class="note">月度体量分析：按自然月聚合全年数据，呈现<b>每月净消耗、业绩产出、投产(ROI)、表单量</b>的体量走势与<b>环比</b>（本月 vs 上月）。' +
+    '下方含渠道月度结构演变与病种月度趋势，用于识别淡旺季与结构变化。数据区间覆盖 ' + agg[0].ym + ' 至 ' + agg[n - 1].ym + ' 共 ' + n + ' 个月。</div>';
+
+  // 全年 KPI
+  h += '<div class="kpis">' +
+    kpiCard('总消耗', fmtMoney(tc), '月均 ' + fmtMoney(tc / n), null, 1) +
+    kpiCard('总业绩', fmtMoney(tp), 'ROI ' + fmtFixed(tp / tc), null, 2) +
+    kpiCard('月均消耗', fmtMoney(tc / n), '月均业绩 ' + fmtMoney(tp / n), null, 1) +
+    kpiCard('总表单量', fmtInt(tl), '月均 ' + fmtInt(tl / n), null, 4) +
+    kpiCard('总到诊', fmtInt(ta), '总成交 ' + fmtInt(td), null, 4) +
+    kpiCard('业绩月均环比', fmtPct(cmgr), '复合月增长CMGR', null, 3) +
+    kpiCard('总投产ROI', fmtFixed(tp / tc), '业绩 ÷ 消耗', null, 3) +
+    '</div>';
+
+  // 主组合图：消耗+业绩(柱) + ROI(线)
+  var labels = agg.map(function (x) { return x.ym; });
+  var costArr = agg.map(function (x) { return Math.round(x.cost); });
+  var perfArr = agg.map(function (x) { return Math.round(x.perf); });
+  var roiArr = agg.map(function (x) { return x.cost > 0 ? +(x.perf / x.cost).toFixed(2) : 0; });
+  h += '<div class="panel"><div class="panel-h"><h3>月度体量：净消耗 / 业绩 / 投产(ROI)</h3>' +
+    '<span class="sub">柱=金额，线=ROI（右轴）</span></div>' +
+    '<div class="panel-b"><div class="chart h320"><canvas id="cMon"></canvas></div></div></div>';
+
+  // 明细表（含环比）
+  var dt = '<table><thead><tr><th class="l">月份</th><th>净消耗</th><th>业绩</th><th>投产</th>' +
+    '<th>表单量</th><th>有效表单</th><th>有效率</th><th>到诊</th><th>成交</th><th>客单价</th>' +
+    '<th>消耗环比</th><th>业绩环比</th></tr></thead><tbody>';
+  var perfArr2 = agg.map(function (y) { return y.perf; });
+  agg.forEach(function (x, i) {
+    var roi = x.cost > 0 ? x.perf / x.cost : 0;
+    var eff = x.leads > 0 ? x.valid / x.leads : 0;
+    var auc = x.deal > 0 ? x.perf / x.deal : 0;
+    var pc = i > 0 ? dSpan(x.cost, agg[i - 1].cost) : '<span class="mut">-</span>';
+    var pp = i > 0 ? dSpan(x.perf, agg[i - 1].perf) : '<span class="mut">-</span>';
+    var peakCls = (x.perf === maxPerf) ? ' class="b"' : '';
+    dt += '<tr' + (i === n - 1 ? ' style="background:#1b2333"' : '') + '><td class="l"><b>' + x.ym + '</b></td>' +
+      '<td>' + fmtMoney(x.cost) + '</td>' +
+      '<td' + peakCls + '>' + fmtMoney(x.perf) + '</td>' +
+      '<td class="' + (roi >= 2.5 ? 'up' : roi >= 1.5 ? '' : 'dn') + ' b">' + fmtFixed(roi) + '</td>' +
+      '<td>' + fmtInt(x.leads) + '</td><td>' + fmtInt(x.valid) + '</td>' +
+      '<td>' + fmtPct(eff) + '</td><td>' + fmtInt(x.arrive) + '</td><td>' + fmtInt(x.deal) + '</td>' +
+      '<td>' + fmtMoney(auc) + '</td><td>' + pc + '</td><td>' + pp + '</td></tr>';
+  });
+  dt += '</tbody></table>';
+  h += '<div class="panel"><div class="panel-h"><h3>月度体量明细（含环比）</h3>' +
+    '<span class="sub">本月 vs 上月；末行=最新月；业绩峰值月份加粗</span></div>' +
+    '<div class="panel-b np"><div class="tw">' + dt + '</div></div></div>';
+
+  // 渠道月度结构（堆叠）
+  var mByMain = {};
+  R.forEach(function (r) {
+    var ym = r.d.slice(0, 7), main = C[r.ci].main, mk = S.monChannelMetric;
+    var key = ym + '|' + main;
+    if (!mByMain[key]) mByMain[key] = { ym: ym, main: main, cost: 0, perf: 0 };
+    mByMain[key][mk] += (mk === 'cost' ? r.cost : r.perf);
+  });
+  var chDatasets = MAINS.map(function (m) {
+    return {
+      label: m, backgroundColor: colorMain(m),
+      data: labels.map(function (ym) { var o = mByMain[ym + '|' + m]; return o ? o[S.monChannelMetric] : 0; })
+    };
+  });
+  var chTitle = S.monChannelMetric === 'cost' ? '渠道月度消耗结构' : '渠道月度业绩结构';
+  h += '<div class="panel"><div class="panel-h"><h3>' + chTitle + '</h3>' +
+    '<span class="sub">堆叠=主渠道，看渠道结构演变（顶栏可切换业绩/消耗）</span></div>' +
+    '<div class="panel-b"><div class="chart h320"><canvas id="cMonCh"></canvas></div></div></div>';
+
+  // 病种月度趋势（业绩，多线）
+  var mDis = {};
+  DISROWS.forEach(function (r) {
+    var ym = r[0], nm = remapDis(DIS[r[2]]);
+    if (DIS_ORDER.indexOf(nm) < 0) return;
+    if (!mDis[ym]) mDis[ym] = {};
+    mDis[ym][nm] = (mDis[ym][nm] || 0) + r[5];
+  });
+  var disDatasets = DIS_ORDER.map(function (d) {
+    return { label: d, borderColor: DIS_COLOR[d], backgroundColor: DIS_COLOR[d], fill: false, tension: 0.25,
+      data: labels.map(function (ym) { return mDis[ym] && mDis[ym][d] ? mDis[ym][d] : 0; }) };
+  });
+  h += '<div class="panel"><div class="panel-h"><h3>病种月度业绩趋势</h3>' +
+    '<span class="sub">多线=病种（全科+儿科已合并）</span></div>' +
+    '<div class="panel-b"><div class="chart h300"><canvas id="cMonDis"></canvas></div></div></div>';
+
+  $('#content').innerHTML = h;
+
+  new Chart($('#cMon'), {
+    data: { labels: labels, datasets: [
+      { type: 'bar', label: '净消耗', data: costArr, backgroundColor: 'rgba(74,158,255,.7)', yAxisID: 'y', order: 3 },
+      { type: 'bar', label: '业绩', data: perfArr, backgroundColor: 'rgba(255,215,0,.75)', yAxisID: 'y', order: 3 },
+      { type: 'line', label: 'ROI', data: roiArr, borderColor: '#2ecc71', backgroundColor: '#2ecc71', yAxisID: 'y1', order: 1, tension: 0.25 }
+    ] },
+    options: { responsive: true, maintainAspectRatio: false,
+      scales: {
+        y: { position: 'left', ticks: { callback: function (v) { return fmtMoney(v); } } },
+        y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: function (v) { return v; } }, title: { display: true, text: 'ROI' } }
+      },
+      plugins: { legend: { position: 'bottom' },
+        tooltip: { callbacks: { label: function (c) { return c.dataset.label + ': ' + (c.dataset.label === 'ROI' ? c.parsed.y : fmtMoney(c.parsed.y)); } } } } }
+  });
+  new Chart($('#cMonCh'), {
+    type: 'bar',
+    data: { labels: labels, datasets: chDatasets },
+    options: { responsive: true, maintainAspectRatio: false,
+      scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: function (v) { return fmtMoney(v); } } } },
+      plugins: { legend: { position: 'bottom' },
+        tooltip: { callbacks: { label: function (c) { return c.dataset.label + ': ' + fmtMoney(c.parsed.y); } } } } }
+  });
+  new Chart($('#cMonDis'), {
+    type: 'line',
+    data: { labels: labels, datasets: disDatasets },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: { y: { ticks: { callback: function (v) { return fmtMoney(v); } } } },
+      plugins: { legend: { position: 'bottom' },
+        tooltip: { callbacks: { label: function (c) { return c.dataset.label + ': ' + fmtMoney(c.parsed.y); } } } } }
+  });
+  renderFoot();
+}
 function pageAlert() {
   var rows = baseRows(S.from, S.to);
   var days = Math.max(1, dayDiff(S.from, S.to) + 1);
@@ -1861,6 +2014,7 @@ function render() {
   else if (S.page === 'main') pageMain();
   else if (S.page === 'owner') pageOwner();
   else if (S.page === 'disease') pageDisease();
+  else if (S.page === 'monthly') pageMonthly();
   else if (S.page === 'alert') pageAlert();
   else if (S.page === 'compare') pageCompare();
 }
