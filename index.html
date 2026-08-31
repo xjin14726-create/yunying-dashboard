@@ -2099,7 +2099,7 @@ function authShow() {
   ov.innerHTML =
     '<style id="loginStyle">' +
     '#loginOverlay{position:fixed;inset:0;z-index:9999;display:flex;overflow:hidden;font-family:"PingFang SC","Microsoft YaHei",sans-serif}' +
-    '#loginOverlay .login-cover{flex:1 1 50%;background:#0d1117 center/cover no-repeat;position:relative}' +
+    '#loginOverlay .login-cover{flex:1 1 50%;background:#0d1117 center/cover no-repeat;background-image:url(data:image/jpeg;base64,' + (LOGIN_COVER_B64 || '') + ');position:relative}' +
     '#loginOverlay .login-cover::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(13,17,23,.12),rgba(13,17,23,.5))}' +
     '#loginOverlay .login-cover .cap{position:absolute;left:38px;bottom:36px;z-index:2;color:#fff;text-shadow:0 2px 14px rgba(0,0,0,.65);max-width:80%}' +
     '#loginOverlay .login-cover .cap h1{font-size:27px;font-weight:700;letter-spacing:2px}' +
@@ -2133,8 +2133,7 @@ function authShow() {
     '<label>账号</label><input id="loginUser" type="text" autocomplete="username" placeholder="请输入账号">' +
     '<label>密码</label><input id="loginPass" type="password" autocomplete="current-password" placeholder="请输入密码">' +
     '<button class="lk" id="loginBtn">登 录</button>' +
-    '<label class="rm"><input type="checkbox" id="loginRemember">记住我（本机 7 天内免登录）</label>' +
-    '<div class="tip">账号 admin · 初始密码见部署说明<br>前端轻量门禁 · 仅供内部使用</div>' +
+    '<label class="rm"><input type="checkbox" id="loginRemember">7天免密登录</label>' +
     '</div></div>';
   document.body.appendChild(ov);
   var cover = document.getElementById('loginCover');
