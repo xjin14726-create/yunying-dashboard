@@ -1341,17 +1341,20 @@ function pageMonthly() {
   var tl = agg.reduce(function (s, x) { return s + x.leads; }, 0);
   var ta = agg.reduce(function (s, x) { return s + x.arrive; }, 0);
   var td = agg.reduce(function (s, x) { return s + x.deal; }, 0);
+  var mwc = Math.max(1, agg.filter(function (x) { return x.cost > 0; }).length);
   var cmgr = n >= 2 ? (Math.pow(agg[n - 1].perf / agg[0].perf, 1 / (n - 1)) - 1) : 0;
   var maxPerf = agg.reduce(function (m, x) { return Math.max(m, x.perf); }, 0);
+  var costStart = agg.filter(function (x) { return x.cost > 0; })[0];
+  var costNote = costStart ? ('注：标准渠道消耗数据自 ' + costStart.ym + ' 起，此前月份仅含业绩/到诊/成交、无消耗，故这些月的净消耗与投产显示为「-」，月均消耗按 ' + mwc + ' 个有消耗月计算。') : '';
 
   var h = '<div class="note">月度体量分析：按自然月聚合全年数据，呈现<b>每月净消耗、业绩产出、投产(ROI)、表单量</b>的体量走势与<b>环比</b>（本月 vs 上月）。' +
-    '下方含渠道月度结构演变与病种月度趋势，用于识别淡旺季与结构变化。数据区间覆盖 ' + agg[0].ym + ' 至 ' + agg[n - 1].ym + ' 共 ' + n + ' 个月。</div>';
+    '下方含渠道月度结构演变与病种月度趋势，用于识别淡旺季与结构变化。数据区间覆盖 ' + agg[0].ym + ' 至 ' + agg[n - 1].ym + ' 共 ' + n + ' 个月。' + costNote + '</div>';
 
   // 全年 KPI
   h += '<div class="kpis">' +
-    kpiCard('总消耗', fmtMoney(tc), '月均 ' + fmtMoney(tc / n), null, 1) +
+    kpiCard('总消耗', fmtMoney(tc), '有消耗月 ' + mwc + ' 个', null, 1) +
     kpiCard('总业绩', fmtMoney(tp), 'ROI ' + fmtFixed(tp / tc), null, 2) +
-    kpiCard('月均消耗', fmtMoney(tc / n), '月均业绩 ' + fmtMoney(tp / n), null, 1) +
+    kpiCard('月均消耗', fmtMoney(tc / mwc), '月均业绩 ' + fmtMoney(tp / n), null, 1) +
     kpiCard('总表单量', fmtInt(tl), '月均 ' + fmtInt(tl / n), null, 4) +
     kpiCard('总到诊', fmtInt(ta), '总成交 ' + fmtInt(td), null, 4) +
     kpiCard('业绩月均环比', fmtPct(cmgr), '复合月增长CMGR', null, 3) +
@@ -1362,7 +1365,7 @@ function pageMonthly() {
   var labels = agg.map(function (x) { return x.ym; });
   var costArr = agg.map(function (x) { return Math.round(x.cost); });
   var perfArr = agg.map(function (x) { return Math.round(x.perf); });
-  var roiArr = agg.map(function (x) { return x.cost > 0 ? +(x.perf / x.cost).toFixed(2) : 0; });
+  var roiArr = agg.map(function (x) { return x.cost > 0 ? +(x.perf / x.cost).toFixed(2) : null; });
   h += '<div class="panel"><div class="panel-h"><h3>月度体量：净消耗 / 业绩 / 投产(ROI)</h3>' +
     '<span class="sub">柱=金额，线=ROI（右轴）</span></div>' +
     '<div class="panel-b"><div class="chart h320"><canvas id="cMon"></canvas></div></div></div>';
@@ -1373,19 +1376,20 @@ function pageMonthly() {
     '<th>消耗环比</th><th>业绩环比</th></tr></thead><tbody>';
   var perfArr2 = agg.map(function (y) { return y.perf; });
   agg.forEach(function (x, i) {
-    var roi = x.cost > 0 ? x.perf / x.cost : 0;
+    var roi = x.cost > 0 ? x.perf / x.cost : null;
     var eff = x.leads > 0 ? x.valid / x.leads : 0;
-    var auc = x.deal > 0 ? x.perf / x.deal : 0;
+    var auc = x.deal > 0 ? x.perf / x.deal : null;
     var pc = i > 0 ? dSpan(x.cost, agg[i - 1].cost) : '<span class="mut">-</span>';
     var pp = i > 0 ? dSpan(x.perf, agg[i - 1].perf) : '<span class="mut">-</span>';
     var peakCls = (x.perf === maxPerf) ? ' class="b"' : '';
     dt += '<tr' + (i === n - 1 ? ' style="background:#1b2333"' : '') + '><td class="l"><b>' + x.ym + '</b></td>' +
       '<td>' + fmtMoney(x.cost) + '</td>' +
       '<td' + peakCls + '>' + fmtMoney(x.perf) + '</td>' +
-      '<td class="' + (roi >= 2.5 ? 'up' : roi >= 1.5 ? '' : 'dn') + ' b">' + fmtFixed(roi) + '</td>' +
+      '<td class="' + (roi != null ? (roi >= 2.5 ? 'up' : roi >= 1.5 ? '' : 'dn') : 'mut') + ' b">' + (roi != null ? fmtFixed(roi) : '-') + '</td>' +
       '<td>' + fmtInt(x.leads) + '</td><td>' + fmtInt(x.valid) + '</td>' +
       '<td>' + fmtPct(eff) + '</td><td>' + fmtInt(x.arrive) + '</td><td>' + fmtInt(x.deal) + '</td>' +
-      '<td>' + fmtMoney(auc) + '</td><td>' + pc + '</td><td>' + pp + '</td></tr>';
+      '<td class="' + (auc != null ? '' : 'mut') + '">' + (auc != null ? fmtMoney(auc) : '-') + '</td>' +
+      '<td>' + pc + '</td><td>' + pp + '</td></tr>';
   });
   dt += '</tbody></table>';
   h += '<div class="panel"><div class="panel-h"><h3>月度体量明细（含环比）</h3>' +
