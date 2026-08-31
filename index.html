@@ -45,6 +45,7 @@ body{
 .nav-group-t:hover{color:var(--tx2)}
 .nav-group-t .arw{font-size:9px;transition:transform .18s;transform:rotate(0deg)}
 .nav-group.collapsed .arw{transform:rotate(180deg)}
+.nav-group.collapsed .nav-item{display:none}
 .nav-item{
   padding:7px 16px 7px 26px;cursor:pointer;color:var(--tx2);font-size:12.5px;
   display:flex;align-items:center;gap:8px;border-left:2px solid transparent;transition:.12s;
@@ -635,33 +636,36 @@ function chartDoughnut(id, labels, data, colors) {
 }
 
 /* ---------- 导航栏 ---------- */
+// 各分组折叠状态（true=折叠）；默认「投放渠道」折叠，其余展开。
+// 用户点击后会记录在此，切换页面/时间后仍保持。
+var NAV_COLLAPSE = { 'ng-main': false, 'ng-ch': true, 'ng-own': false, 'ng-an': false };
+
 function renderNav() {
   var h = '';
-  h += '<div class="nav-group" id="ng-main"><div class="nav-group-t" data-grp="ng-main">' +
-       '<span>看板</span><span class="arw">&#9660;</span></div>';
-  h += navItem('overview', null, '数据汇总', '', '#4a9eff');
-  h += '</div>';
-  h += '<div class="nav-group" id="ng-ch"><div class="nav-group-t" data-grp="ng-ch">' +
-       '<span>投放渠道</span><span class="arw">&#9660;</span></div>';
+  function grp(id, title, inner) {
+    return '<div class="nav-group' + (NAV_COLLAPSE[id] ? ' collapsed' : '') + '" id="' + id + '">' +
+           '<div class="nav-group-t" data-grp="' + id + '">' +
+           '<span>' + title + '</span><span class="arw">&#9660;</span></div>' + inner + '</div>';
+  }
+  h += grp('ng-main', '看板', navItem('overview', null, '数据汇总', '', '#4a9eff'));
+  var chInner = '';
   MAINS.forEach(function (m) {
-    h += navItem('main', m, m, fmtMoney(MAIN_TOT[m]), colorMain(m));
+    chInner += navItem('main', m, m, fmtMoney(MAIN_TOT[m]), colorMain(m));
   });
-  h += '</div>';
-  h += '<div class="nav-group" id="ng-own"><div class="nav-group-t" data-grp="ng-own">' +
-       '<span>人员</span><span class="arw">&#9660;</span></div>';
-  h += navItem('owner', null, '运营', '', '#2ecc71');
-  h += '</div>';
-  h += '<div class="nav-group" id="ng-an"><div class="nav-group-t" data-grp="ng-an">' +
-       '<span>分析</span><span class="arw">&#9660;</span></div>';
-  h += navItem('alert', null, '数据预警', '', '#e5484d');
-  h += navItem('compare', null, '数据对比分析', '', '#a78bfa');
-  h += '</div>';
+  h += grp('ng-ch', '投放渠道', chInner);
+  h += grp('ng-own', '人员', navItem('owner', null, '运营', '', '#2ecc71'));
+  h += grp('ng-an', '分析',
+    navItem('alert', null, '数据预警', '', '#e5484d') +
+    navItem('compare', null, '数据对比分析', '', '#a78bfa'));
   $('#nav').innerHTML = h;
   $('#brandSub').textContent = D_MIN + ' 至 ' + D_MAX + ' | ' + fmtInt(R.length) + ' 条记录';
 
   $('#nav').querySelectorAll('[data-grp]').forEach(function (t) {
     t.addEventListener('click', function () {
-      document.getElementById(t.dataset.grp).classList.toggle('collapsed');
+      var id = t.dataset.grp;
+      var el = document.getElementById(id);
+      var nowCollapsed = el.classList.toggle('collapsed');
+      NAV_COLLAPSE[id] = nowCollapsed;
     });
   });
   $('#nav').querySelectorAll('[data-page]').forEach(function (it) {
