@@ -636,18 +636,17 @@ function chartDoughnut(id, labels, data, colors) {
 }
 
 /* ---------- 导航栏 ---------- */
-// 各分组折叠状态（true=折叠）；默认「投放渠道」折叠，其余展开。
-// 用户点击后会记录在此，切换页面/时间后仍保持。
-var NAV_COLLAPSE = { 'ng-main': false, 'ng-ch': true, 'ng-own': false, 'ng-an': false };
+// 各分组折叠状态（投放渠道默认折叠）。「数据汇总」已提为独立项，无分组。
+var NAV_COLLAPSE = { 'ng-ch': true, 'ng-own': false, 'ng-an': false };
 
 function renderNav() {
   var h = '';
+  h += navItem('overview', null, '数据汇总', '', '#4a9eff');
   function grp(id, title, inner) {
     return '<div class="nav-group' + (NAV_COLLAPSE[id] ? ' collapsed' : '') + '" id="' + id + '">' +
            '<div class="nav-group-t" data-grp="' + id + '">' +
            '<span>' + title + '</span><span class="arw">&#9660;</span></div>' + inner + '</div>';
   }
-  h += grp('ng-main', '看板', navItem('overview', null, '数据汇总', '', '#4a9eff'));
   var chInner = '';
   MAINS.forEach(function (m) {
     chInner += navItem('main', m, m, fmtMoney(MAIN_TOT[m]), colorMain(m));
