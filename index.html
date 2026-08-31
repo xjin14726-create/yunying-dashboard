@@ -347,7 +347,9 @@ var S = {
   main: null,
   from: D_MAX.slice(0, 8) + '01',   // 默认当月 1 号
   to: D_MAX,
-  owners: {}, subs: {}, areas: {}, codes: {}
+  owners: {}, subs: {}, areas: {}, codes: {},
+  disDim: 'main',      // 病种分析维度：main=按渠道 / owner=按运营
+  disMetric: 'cost'    // 病种分析指标：cost/perf/cpa/deal/eff/leads/roi
 };
 // 对比页独立区间
 var CMP = { base: null, prev: null };
@@ -655,6 +657,7 @@ function renderNav() {
   h += grp('ng-own', '人员', navItem('owner', null, '运营', '', '#2ecc71'));
   h += grp('ng-an', '分析',
     navItem('alert', null, '数据预警', '', '#e5484d') +
+    navItem('disease', null, '病种分析', '', '#ffd700') +
     navItem('compare', null, '数据对比分析', '', '#a78bfa'));
   $('#nav').innerHTML = h;
   $('#brandSub').textContent = D_MIN + ' 至 ' + D_MAX + ' | ' + fmtInt(R.length) + ' 条记录';
@@ -690,6 +693,7 @@ function resetDim() { S.owners = {}; S.subs = {}; S.areas = {}; S.codes = {}; KE
 function renderTop() {
   var t = S.page === 'overview' ? '数据汇总' :
           S.page === 'owner' ? '运营' :
+          S.page === 'disease' ? '病种分析' :
           S.page === 'alert' ? '数据预警' :
           S.page === 'compare' ? '数据对比分析' : (S.main || '渠道');
   var sub = '';
@@ -744,6 +748,18 @@ function renderTop() {
     if (OWN_MANUAL && OWN_MANUAL.length) {
       pc += '<button class="btn sm" id="resetSort">恢复排序</button>';
     }
+  } else if (S.page === 'disease') {
+    pc += '<div class="seg" id="disDim">';
+    [['main', '按渠道'], ['owner', '按运营']].forEach(function (x) {
+      pc += '<button data-disdim="' + x[0] + '"' + (S.disDim === x[0] ? ' class="on"' : '') + '>' + x[1] + '</button>';
+    });
+    pc += '</div>';
+    pc += '<div class="seg" id="disMetric">';
+    [['cost', '消耗'], ['perf', '业绩'], ['cpa', '到诊成本'], ['deal', '成交'], ['eff', '有效率'], ['leads', '表单量']]
+      .forEach(function (x) {
+        pc += '<button data-dismetric="' + x[0] + '"' + (S.disMetric === x[0] ? ' class="on"' : '') + '>' + x[1] + '</button>';
+      });
+    pc += '</div>';
   }
   $('#pageCtl').innerHTML = pc;
   var cd = $('#clrDim');
@@ -754,6 +770,14 @@ function renderTop() {
   });
   var rs = $('#resetSort');
   if (rs) rs.addEventListener('click', function () { OWN_MANUAL = null; render(); });
+  var dd = $('#disDim');
+  if (dd) dd.querySelectorAll('[data-disdim]').forEach(function (b) {
+    b.addEventListener('click', function () { S.disDim = b.dataset.disdim; render(); });
+  });
+  var dm = $('#disMetric');
+  if (dm) dm.querySelectorAll('[data-dismetric]').forEach(function (b) {
+    b.addEventListener('click', function () { S.disMetric = b.dataset.dismetric; render(); });
+  });
 }
 function quickRange(mode) {
   if (mode === 'ALL') return [D_MIN, D_MAX];
@@ -940,6 +964,181 @@ function diseaseAgg(rows, from, to) {
     s.cost += r[3]; s.leads += r[4]; s.valid += r[5];
   });
   return out;
+}
+
+/* ---------- 病种分析页 ---------- */
+var DIS_ORDER = ['种植', '矫正', '贴面', '全科+儿科', '洁牙'];
+var DIS_COLOR = { '种植': '#4a9eff', '矫正': '#a78bfa', '贴面': '#2ecc71', '全科+儿科': '#ffd700', '洁牙': '#f5a623' };
+var METRIC_LABEL = { cost: '消耗', perf: '业绩', cpa: '到诊成本', deal: '成交', eff: '有效率', leads: '表单量', roi: '投产' };
+// 全科与儿科合并为「全科+儿科」
+function remapDis(n) { return (n === '全科' || n === '儿科') ? '全科+儿科' : n; }
+// 病种透视聚合：按维度(主渠道/运营) → 病种 → 指标
+function diseasePivot(dim, from, to) {
+  var fromYm = from.slice(0, 7), toYm = to.slice(0, 7);
+  var out = {};
+  function get(m, d) {
+    if (!out[m]) out[m] = {};
+    if (!out[m][d]) out[m][d] = { cost: 0, leads: 0, valid: 0, arrive: 0, deal: 0, perf: 0 };
+    return out[m][d];
+  }
+  DISROWS.forEach(function (r) {
+    if (r[0] < fromYm || r[0] > toYm) return;
+    var m = C[r[1]][dim], nm = remapDis(DIS[r[2]]);
+    var s = get(m, nm);
+    s.arrive += r[3]; s.deal += r[4]; s.perf += r[5]; s.leads += r[6]; s.valid += r[7];
+  });
+  DIS_COST.forEach(function (r) {
+    if (r[0] < fromYm || r[0] > toYm) return;
+    var m = C[r[1]][dim], nm = remapDis(DIS[r[2]]);
+    var s = get(m, nm);
+    s.cost += r[3]; s.leads += r[4]; s.valid += r[5];
+  });
+  return out;
+}
+// 取单格指标值（null = 无数据，按病种消耗口径缺失）
+function disVal(s, mk) {
+  switch (mk) {
+    case 'cost': return s.cost > 0 ? s.cost : null;
+    case 'perf': return s.perf;
+    case 'arrive': return s.arrive;
+    case 'deal': return s.deal;
+    case 'leads': return s.leads;
+    case 'valid': return s.valid;
+    case 'eff': return s.leads > 0 ? s.valid / s.leads : null;
+    case 'cpa': return (s.cost > 0 && s.arrive > 0) ? s.cost / s.arrive : null;
+    case 'roi': return s.cost > 0 ? s.perf / s.cost : null;
+  }
+  return null;
+}
+function fmtDisVal(v, mk) {
+  if (v === null || v === undefined) return '<span class="mut">-</span>';
+  if (mk === 'cost' || mk === 'cpa') return fmtMoney(v);
+  if (mk === 'eff') return fmtPct(v);
+  if (mk === 'roi') return fmtFixed(v);
+  return fmtInt(v);
+}
+function pageDisease() {
+  var rows = baseRows(S.from, S.to);
+  var a = sumAgg(rows), k = kpi(a);
+  var days = Math.max(1, dayDiff(S.from, S.to) + 1);
+  var dim = S.disDim, mk = S.disMetric;
+  var additive = !(mk === 'eff' || mk === 'cpa' || mk === 'roi');
+  var pv = diseasePivot(dim, S.from, S.to);
+
+  // 成员清单：病种聚合命中的 + 当前区间有活动的
+  var mset = {};
+  Object.keys(pv).forEach(function (m) { mset[m] = true; });
+  rows.forEach(function (r) { mset[C[r.ci][dim]] = true; });
+  var members = Object.keys(mset).sort(function (x, y) {
+    return sumAgg(rows.filter(function (r) { return C[r.ci][dim] === y; })).cost -
+      sumAgg(rows.filter(function (r) { return C[r.ci][dim] === x; })).cost;
+  });
+  var label = dim === 'main' ? '渠道' : '运营';
+
+  var h = '<div class="note">病种分析：将<b>消耗 / 业绩 / 到诊 / 成交 / 表单</b>按病种拆解，可切换「按渠道 / 按运营」查看每个' +
+    label + '下的病种投放结构与有效率；<b>全科与儿科已合并</b>为「全科+儿科」。' +
+    '<b>口径</b>：病种级<b>消耗 / 到诊成本</b>仅本地推与电商三方有真实数据（其余渠道源表未按病种拆分消耗，显示「-」）；' +
+    '到诊 / 成交 / 业绩 / 表单 / 有效率覆盖全部渠道。病种数据按自然月聚合，区间内的部分月份按整月计入。</div>';
+
+  if (!members.length) {
+    $('#content').innerHTML = h + '<div class="empty">当前时间范围内无数据。</div>';
+    renderFoot(); return;
+  }
+
+  // 总览 KPI（全渠道）
+  h += '<div class="kpis">' +
+    kpiCard('总消耗', fmtMoney(a.cost), '日均 ' + fmtMoney(a.cost / days), null, 1) +
+    kpiCard('总业绩', fmtMoney(a.perf), 'ROI ' + fmtFixed(k.roi), null, 2) +
+    kpiCard('总到诊', fmtInt(a.arrive), '到诊成本 ' + fmtCost(k.cpa), null, 4) +
+    kpiCard('总成交', fmtInt(a.deal), '成交成本 ' + fmtCost(k.cpd), null, 5) +
+    kpiCard('有效表单', fmtInt(a.valid), '有效率 ' + fmtPct(a.leads > 0 ? a.valid / a.leads : 0), null, 1) +
+    kpiCard('总投产', fmtFixed(k.roi), '客单价 ' + fmtMoney(k.auc), null, 3) +
+    '</div>';
+
+  // 透视表
+  var pt = '<table><thead><tr><th class="l">' + label + '</th>';
+  DIS_ORDER.forEach(function (d) { pt += '<th>' + d + '</th>'; });
+  pt += '<th>合计</th></tr></thead><tbody>';
+  var colTot = {}; DIS_ORDER.forEach(function (d) { colTot[d] = 0; });
+  var grand = 0;
+  members.forEach(function (m) {
+    var mr = pv[m] || {};
+    pt += '<tr><td class="l"><b>' + esc(m) + '</b></td>';
+    var rowSum = 0;
+    DIS_ORDER.forEach(function (d) {
+      var v = disVal(mr[d] || {}, mk);
+      var cls = (v !== null && (mk === 'cost' || mk === 'cpa')) ? ' class="b"' : '';
+      pt += '<td' + cls + '>' + fmtDisVal(v, mk) + '</td>';
+      if (v !== null && additive) { rowSum += v; colTot[d] += v; }
+    });
+    pt += '<td class="b">' + fmtDisVal(additive ? rowSum : null, mk) + '</td></tr>';
+    if (additive) grand += rowSum;
+  });
+  pt += '<tr class="b"><td class="l">合计</td>';
+  DIS_ORDER.forEach(function (d) { pt += '<td>' + fmtDisVal(additive ? colTot[d] : null, mk) + '</td>'; });
+  pt += '<td>' + fmtDisVal(additive ? grand : null, mk) + '</td></tr>';
+  pt += '</tbody></table>';
+
+  // 病种构成（堆叠柱，仅可加总指标）
+  if (additive) {
+    var cm = members.slice(0, 14);
+    var datasets = DIS_ORDER.map(function (d) {
+      return { label: d, backgroundColor: DIS_COLOR[d],
+        data: cm.map(function (m) { var v = disVal((pv[m] || {})[d] || {}, mk); return v === null ? 0 : v; }) };
+    });
+    h += '<div class="panel"><div class="panel-h"><h3>各' + label + '病种' + METRIC_LABEL[mk] + '构成</h3>' +
+      '<span class="sub">堆叠 = 病种（取消耗/业绩前 14 名）</span></div>' +
+      '<div class="panel-b"><div class="chart h320"><canvas id="cDis"></canvas></div></div></div>';
+  } else {
+    h += '<div class="note w">当前指标「' + METRIC_LABEL[mk] + '」为比率类，无法做堆叠汇总，请用下方透视表 / 明细表查看各' +
+      label + '分病种数值。</div>';
+  }
+
+  h += '<div class="panel"><div class="panel-h"><h3>病种' + METRIC_LABEL[mk] + '透视</h3>' +
+    '<span class="sub">行=' + label + '，列=病种，合计=5 病种求和</span></div>' +
+    '<div class="panel-b np"><div class="tw">' + pt + '</div></div></div>';
+
+  // 明细表：成员 × 病种 全指标
+  var dt = '<table><thead><tr><th class="l">' + label + '</th><th class="l">病种</th>' +
+    '<th>消耗</th><th>表单量</th><th>有效</th><th>有效率</th><th>到诊</th><th>成交</th><th>业绩</th><th>到诊成本</th></tr></thead><tbody>';
+  members.forEach(function (m) {
+    var mr = pv[m] || {};
+    DIS_ORDER.forEach(function (d) {
+      var s = mr[d] || { cost: 0, leads: 0, valid: 0, arrive: 0, deal: 0, perf: 0 };
+      var eff = s.leads > 0 ? s.valid / s.leads : null;
+      var cpa = (s.cost > 0 && s.arrive > 0) ? s.cost / s.arrive : null;
+      dt += '<tr><td class="l">' + esc(m) + '</td><td class="l">' + esc(d) + '</td>' +
+        '<td>' + (s.cost > 0 ? fmtMoney(s.cost) : '<span class="mut">-</span>') + '</td>' +
+        '<td>' + (s.leads > 0 ? fmtInt(s.leads) : '<span class="mut">-</span>') + '</td>' +
+        '<td>' + (s.valid > 0 ? fmtInt(s.valid) : '<span class="mut">-</span>') + '</td>' +
+        '<td>' + (eff !== null ? fmtPct(eff) : '<span class="mut">-</span>') + '</td>' +
+        '<td>' + fmtInt(s.arrive) + '</td><td>' + fmtInt(s.deal) + '</td>' +
+        '<td class="b">' + fmtMoney(s.perf) + '</td>' +
+        '<td class="' + (cpa !== null ? 'b' : 'mut') + '">' + (cpa !== null ? fmtMoney(cpa) : '-') + '</td></tr>';
+    });
+  });
+  dt += '</tbody></table>';
+  h += '<div class="panel"><div class="panel-h"><h3>' + label + ' × 病种 明细（全指标）</h3>' +
+    '<span class="sub">消耗 / 到诊成本仅本地推 + 电商三方有数据</span></div>' +
+    '<div class="panel-b np"><div class="tw">' + dt + '</div></div></div>';
+
+  $('#content').innerHTML = h;
+
+  if (additive) {
+    var cm2 = members.slice(0, 14);
+    new Chart($('#cDis'), {
+      type: 'bar',
+      data: { labels: cm2, datasets: DIS_ORDER.map(function (d) {
+        return { label: d, backgroundColor: DIS_COLOR[d],
+          data: cm2.map(function (m) { var v = disVal((pv[m] || {})[d] || {}, mk); return v === null ? 0 : v; }) };
+      }) },
+      options: { responsive: true, maintainAspectRatio: false,
+        scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: function (v) { return fmtMoney(v); } } } },
+        plugins: { legend: { position: 'bottom' },
+          tooltip: { callbacks: { label: function (c) { return c.dataset.label + ': ' + fmtDisVal(c.parsed.y, mk); } } } } }
+    });
+  }
+  renderFoot();
 }
 
 /* ---------- 页面：一级渠道 ---------- */
@@ -1661,6 +1860,7 @@ function render() {
   if (S.page === 'overview') pageOverview();
   else if (S.page === 'main') pageMain();
   else if (S.page === 'owner') pageOwner();
+  else if (S.page === 'disease') pageDisease();
   else if (S.page === 'alert') pageAlert();
   else if (S.page === 'compare') pageCompare();
 }
