@@ -2099,8 +2099,8 @@ function authShow() {
   ov.innerHTML =
     '<style id="loginStyle">' +
     '#loginOverlay{position:fixed;inset:0;z-index:9999;display:flex;overflow:hidden;font-family:"PingFang SC","Microsoft YaHei",sans-serif}' +
-    '#loginOverlay .login-cover{flex:1 1 50%;background:#0d1117 center/cover no-repeat;background-image:url(data:image/jpeg;base64,' + (LOGIN_COVER_B64 || '') + ');position:relative}' +
-    '#loginOverlay .login-cover::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(13,17,23,.12),rgba(13,17,23,.5))}' +
+    '#loginOverlay .login-cover{flex:1 1 50%;background:#0d1117 center/cover no-repeat;background-image:url(data:image/jpeg;base64,' + (LOGIN_COVER_B64 || '') + ');filter:brightness(1.12) contrast(1.05) saturate(1.1);position:relative}' +
+    '#loginOverlay .login-cover::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(13,17,23,.02),rgba(13,17,23,.30))}' +
     '#loginOverlay .login-cover .cap{position:absolute;left:38px;bottom:36px;z-index:2;color:#fff;text-shadow:0 2px 14px rgba(0,0,0,.65);max-width:80%}' +
     '#loginOverlay .login-cover .cap h1{font-size:27px;font-weight:700;letter-spacing:2px}' +
     '#loginOverlay .login-cover .cap p{font-size:13px;opacity:.88;margin-top:8px;letter-spacing:1px}' +
@@ -2120,7 +2120,7 @@ function authShow() {
     '@media(max-width:767px){' +
     '#loginOverlay{flex-direction:column}' +
     '#loginOverlay .login-cover{position:absolute;inset:0;flex:none;z-index:0}' +
-    '#loginOverlay .login-cover::after{background:rgba(13,17,23,.58)}' +
+    '#loginOverlay .login-cover::after{background:rgba(13,17,23,.40)}' +
     '#loginOverlay .login-cover .cap{display:none}' +
     '#loginOverlay .login-side{position:relative;z-index:1;flex:none;width:100%;height:100%;background:transparent;padding:20px}' +
     '}' +
